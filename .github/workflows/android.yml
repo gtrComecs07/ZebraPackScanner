@@ -23,20 +23,44 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Accept SDK licenses
+        run: yes | sdkmanager --licenses || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build APK
-        run: gradle assembleDebug
+      - name: Find project and build APK
+        shell: bash
+        run: |
+          PROJECT_FILE=$(find . -type f -name settings.gradle -not -path '*/.gradle/*' -print -quit)
+
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "ERROR: settings.gradle not found"
+            find . -maxdepth 4 -type f
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_FILE")
+          echo "Found project: $PROJECT_DIR"
+
+          cd "$PROJECT_DIR"
+          gradle assembleDebug
+
+          APK=$(find . -type f -path '*/build/outputs/apk/debug/app-debug.apk' -print -quit)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK not generated"
+            exit 1
+          fi
+
+          echo "APK_PATH=$PROJECT_DIR/$APK" >> "$GITHUB_ENV"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ZebraPackScanner-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.APK_PATH }}
+          if-no-files-found: error
